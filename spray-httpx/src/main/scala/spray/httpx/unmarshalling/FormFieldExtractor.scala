@@ -20,18 +20,27 @@ import spray.http._
 
 sealed trait FormFieldExtractor {
   type Field <: FormField
-  def field(name: String): Field
+  def getAll(name: String): Seq[Field]
+  def get(name: String): Field
 }
 
 object FormFieldExtractor {
   def apply(form: HttpForm): FormFieldExtractor = form match {
     case FormData(fields) ⇒ new FormFieldExtractor {
       type Field = UrlEncodedFormField
-      def field(name: String) = new UrlEncodedFormField(name, fields.find(_._1 == name).map(_._2))
+      def getAll(name: String) = fields.filter(_._1 == name).map(f ⇒ new UrlEncodedFormField(name, Some(f._2)))
+      def get(name: String) = getAll(name).toList match {
+        case Nil     ⇒ new UrlEncodedFormField(name, None)
+        case x :: xs ⇒ x
+      }
     }
     case multiPartData: MultipartFormData ⇒ new FormFieldExtractor {
       type Field = MultipartFormField
-      def field(name: String) = new MultipartFormField(name, multiPartData.get(name))
+      def getAll(name: String) = multiPartData.fields.filter(_.name == Some(name)).map(f ⇒ new MultipartFormField(name, Some(f)))
+      def get(name: String) = getAll(name).toList match {
+        case Nil     ⇒ new MultipartFormField(name, None)
+        case x :: xs ⇒ x
+      }
     }
   }
 }

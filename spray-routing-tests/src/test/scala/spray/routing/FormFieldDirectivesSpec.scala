@@ -159,4 +159,28 @@ class FormFieldDirectivesSpec extends RoutingSpec {
       } ~> check { response === Ok }
     }
   }
+  "The repeated 'formField' directive" should {
+    val urlEncodedFormWithRepeatedParams = FormData(Seq("age" -> "42", "hobby" -> ""))
+
+    "extract an empty Iterable when the parameter is absent" in {
+      Get("/", FormData(Seq("age" -> "42"))) ~> {
+        formFields('hobby.*) { echoComplete }
+      } ~> check { responseAs[String] === "List()" }
+    }
+    "extract all occurrences into an Iterable when parameter is present" in {
+      Get("/", FormData(Seq("age" -> "42", "hobby" -> "cooking", "hobby" -> "reading"))) ~> {
+        formFields('hobby.*) { echoComplete }
+      } ~> check { responseAs[String] === "List(cooking, reading)" }
+    }
+    "extract as Iterable[Int]" in {
+      Get("/", FormData(Seq("age" -> "42", "number" -> "3", "number" -> "5"))) ~> {
+        formFields('number.as[Int].*) { echoComplete }
+      } ~> check { responseAs[String] === "List(3, 5)" }
+    }
+    "extract as Iterable[Int] with an explicit deserializer" in {
+      Get("/", FormData(Seq("age" -> "42", "number" -> "3", "number" -> "A"))) ~> {
+        formFields('number.as[Int].*(HexInt)) { echoComplete }
+      } ~> check { responseAs[String] === "List(3, 10)" }
+    }
+  }
 }

@@ -36,17 +36,23 @@ class FormFieldSpec extends Specification {
     "properly allow access to the fields of www-urlencoded forms" in {
       marshal(formData)
         .flatMap(_.as[HttpForm])
-        .flatMap(_.field("surname").as[String]) === Right("Smith")
+        .flatMap(_.get("surname").as[String]) === Right("Smith")
 
       marshal(formData)
         .flatMap(_.as[HttpForm])
-        .flatMap(_.field("age").as[Int]) === Right(42)
+        .flatMap(_.get("age").as[Int]) === Right(42)
+    }
+
+    "properly allow access to the fields of www-urlencoded forms with multiple values" in {
+      marshal(FormData(Seq("age" -> "42", "city" -> "Chicago", "city" -> "Boston")))
+        .flatMap(_.as[HttpForm])
+        .map(_.getAll("city").map(_.rawValue.get)) === Right(Seq("Chicago", "Boston"))
     }
 
     "properly allow access to the fields of www-urlencoded forms containing special chars" in {
       marshal(FormData(Map("name" -> "Smith&Wesson")))
         .flatMap(_.as[HttpForm])
-        .flatMap(_.field("name").as[String]) === Right("Smith&Wesson")
+        .flatMap(_.get("name").as[String]) === Right("Smith&Wesson")
     }
 
     "properly encode the fields of www-urlencoded forms containing special chars" in {
@@ -57,17 +63,17 @@ class FormFieldSpec extends Specification {
     "properly allow access to the fields of multipart/form-data forms" in {
       marshal(multipartFormData)
         .flatMap(_.as[HttpForm])
-        .flatMap(_.field("surname").as[String]) === Right("Smith")
+        .flatMap(_.get("surname").as[String]) === Right("Smith")
 
       marshal(multipartFormData)
         .flatMap(_.as[HttpForm])
-        .flatMap(_.field("age").as[NodeSeq]) === Right(<int>42</int>)
+        .flatMap(_.get("age").as[NodeSeq]) === Right(<int>42</int>)
     }
 
     "return an error when accessing a field of www-urlencoded forms for which no FromStringOptionDeserializer is available" in {
       marshal(formData)
         .flatMap(_.as[HttpForm])
-        .flatMap(_.field("age").as[NodeSeq]) ===
+        .flatMap(_.get("age").as[NodeSeq]) ===
         Left(UnsupportedContentType("Expected 'text/xml' or 'application/xml' or 'text/html' or 'application/xhtml+xml' " +
           "but tried to read from application/x-www-form-urlencoded encoded field 'age' which provides only text/plain values."))
     }
@@ -75,7 +81,7 @@ class FormFieldSpec extends Specification {
     "return an error when accessing a field of multipart forms for which no Unmarshaller is available" in {
       marshal(multipartFormData)
         .flatMap(_.as[HttpForm])
-        .flatMap(_.field("age").as[Int]) ===
+        .flatMap(_.get("age").as[Int]) ===
         Left(UnsupportedContentType("Field 'age' can only be read from 'application/x-www-form-urlencoded' form content but was 'text/xml'"))
     }
   }

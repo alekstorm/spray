@@ -16,7 +16,7 @@
 
 package spray.routing.directives
 
-import spray.httpx.unmarshalling.{ FromStringOptionDeserializer ⇒ FSOD, Deserializer }
+import spray.httpx.unmarshalling.{ FromStringDeserializer ⇒ FSD, FromStringOptionDeserializer ⇒ FSOD, Deserializer }
 
 trait ToNameReceptaclePimps {
   implicit def symbol2NR(symbol: Symbol) = new NameReceptacle[String](symbol.name)
@@ -29,6 +29,8 @@ case class NameReceptacle[A](name: String) {
   def ? = as[Option[A]]
   def ?[B](default: B) = NameDefaultReceptacle(name, default)
   def ![B](requiredValue: B) = RequiredValueReceptacle(name, requiredValue)
+  def * = RepeatedValueReceptacle[A](name)
+  def *(deserializer: FSD[A]) = RepeatedValueDeserializerReceptacle[A](name, deserializer)
 }
 
 case class NameDeserializerReceptacle[A](name: String, deserializer: FSOD[A]) {
@@ -41,6 +43,10 @@ case class NameDefaultReceptacle[A](name: String, default: A)
 
 case class RequiredValueReceptacle[A](name: String, requiredValue: A)
 
+case class RepeatedValueReceptacle[A](name: String)
+
 case class NameDeserializerDefaultReceptacle[A](name: String, deserializer: FSOD[A], default: A)
 
 case class RequiredValueDeserializerReceptacle[A](name: String, deserializer: FSOD[A], requiredValue: A)
+
+case class RepeatedValueDeserializerReceptacle[A](name: String, deserializer: FSD[A])

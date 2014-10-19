@@ -62,17 +62,18 @@ object FieldDefMagnet2 extends ToNameReceptaclePimps {
   import BasicDirectives._
   import RouteDirectives._
 
+  private def extractField[A, B](f: A ⇒ Directive1[B]) = FieldDefMagnetAux[A, Directive1[B]](f)
+  private def handleFieldResult[T](fieldName: String, result: Either[DeserializationError, T]): Directive1[T] = result match {
+    case Right(value)                       ⇒ provide(value)
+    case Left(ContentExpected)              ⇒ reject(MissingFormFieldRejection(fieldName))
+    case Left(MalformedContent(msg, cause)) ⇒ reject(MalformedFormFieldRejection(fieldName, msg, cause))
+    case Left(UnsupportedContentType(msg))  ⇒ reject(UnsupportedRequestContentTypeRejection(msg))
+  }
+
   /************ "regular" field extraction ******************/
 
-  def extractField[A, B](f: A ⇒ Directive1[B]) = FieldDefMagnetAux[A, Directive1[B]](f)
-
   private def filter[A, B](nr: NameReceptacle[A])(implicit ev1: UM[HttpForm], ev2: FFC[B]): Directive1[B] =
-    extract(_.request.as[HttpForm].right.flatMap(_.field(nr.name).as[B])).flatMap {
-      case Right(value)                       ⇒ provide(value)
-      case Left(ContentExpected)              ⇒ reject(MissingFormFieldRejection(nr.name))
-      case Left(MalformedContent(msg, cause)) ⇒ reject(MalformedFormFieldRejection(nr.name, msg, cause))
-      case Left(UnsupportedContentType(msg))  ⇒ reject(UnsupportedRequestContentTypeRejection(msg))
-    }
+    extract(_.request.as[HttpForm].right.flatMap(_.get(nr.name).as[B])).flatMap(r ⇒ handleFieldResult(nr.name, r))
   implicit def forString(implicit ev1: UM[HttpForm], ev2: FFC[String]) =
     extractField[String, String](string ⇒ filter(string))
   implicit def forSymbol(implicit ev1: UM[HttpForm], ev2: FFC[String]) =
@@ -105,6 +106,29 @@ object FieldDefMagnet2 extends ToNameReceptaclePimps {
     FieldDefMagnetAux[RequiredValueDeserializerReceptacle[T], Directive0] { rvr ⇒
       requiredFilter(rvr.name, rvr.requiredValue)(ev1, FFC.fromFSOD(rvr.deserializer))
     }
+
+  /************ repeated formField support ******************/
+
+  private def repeatedFilter[A, B](fieldName: String)(implicit ev1: UM[FormData], ffc: FFC[B]): Directive1[Iterable[B]] =
+    extract(_.request.as[FormData].right.map(_.getAll(fieldName).map(_.as[B]))).flatMap { values ⇒
+      val result = values.right.flatMap { values ⇒
+        values.foldRight(Right(Nil): Deserialized[List[B]]) { (e, acc) ⇒
+          for {
+            xs ← acc.right
+            x ← e.right
+          } yield x :: xs
+        }
+      }
+      handleFieldResult(fieldName, result)
+    }
+
+  implicit def forRepVR[T](implicit ev1: UM[FormData], ev2: FFC[T]) = extractField[RepeatedValueReceptacle[T], Iterable[T]] { rvr ⇒
+    repeatedFilter(rvr.name)
+  }
+
+  implicit def forRepVDR[T](implicit ev1: UM[FormData], ev2: FBPOU[T] = null) = extractField[RepeatedValueDeserializerReceptacle[T], Iterable[T]] { rvr ⇒
+    repeatedFilter(rvr.name)(ev1, FFC.fromFSOD(rvr.deserializer))
+  }
 
   /************ tuple support ******************/
 

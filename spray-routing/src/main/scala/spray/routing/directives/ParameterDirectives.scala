@@ -84,20 +84,22 @@ object ParamDefMagnet2 {
   type ParamDefMagnetAux[A, B] = ParamDefMagnet2[A] { type Out = B }
   def ParamDefMagnetAux[A, B](f: A ⇒ B) = new ParamDefMagnet2[A] { type Out = B; def apply(value: A) = f(value) }
 
-  import spray.httpx.unmarshalling.{ FromStringOptionDeserializer ⇒ FSOD, _ }
+  import spray.httpx.unmarshalling.{ FromStringDeserializer ⇒ FSD, FromStringOptionDeserializer ⇒ FSOD, _ }
   import BasicDirectives._
   import RouteDirectives._
 
+  private def extractParameter[A, B](f: A ⇒ Directive1[B]) = ParamDefMagnetAux[A, Directive1[B]](f)
+  private def handleParamResult[T](paramName: String, result: Either[DeserializationError, T]): Directive1[T] = result match {
+    case Right(x)                             ⇒ provide(x)
+    case Left(ContentExpected)                ⇒ reject(MissingQueryParamRejection(paramName))
+    case Left(MalformedContent(error, cause)) ⇒ reject(MalformedQueryParamRejection(paramName, error, cause))
+    case Left(x: UnsupportedContentType)      ⇒ throw new IllegalStateException(x.toString)
+  }
+
   /************ "regular" parameter extraction ******************/
 
-  private def extractParameter[A, B](f: A ⇒ Directive1[B]) = ParamDefMagnetAux[A, Directive1[B]](f)
   private def filter[T](paramName: String, fsod: FSOD[T]): Directive1[T] =
-    extract(ctx ⇒ fsod(ctx.request.uri.query.get(paramName))).flatMap {
-      case Right(x)                             ⇒ provide(x)
-      case Left(ContentExpected)                ⇒ reject(MissingQueryParamRejection(paramName))
-      case Left(MalformedContent(error, cause)) ⇒ reject(MalformedQueryParamRejection(paramName, error, cause))
-      case Left(x: UnsupportedContentType)      ⇒ throw new IllegalStateException(x.toString)
-    }
+    extract(ctx ⇒ fsod(ctx.request.uri.query.get(paramName))).flatMap(r ⇒ handleParamResult(paramName, r))
   implicit def forString(implicit fsod: FSOD[String]) = extractParameter[String, String] { string ⇒
     filter(string, fsod)
   }
@@ -129,6 +131,27 @@ object ParamDefMagnet2 {
   }
   implicit def forRVDR[T] = ParamDefMagnetAux[RequiredValueDeserializerReceptacle[T], Directive0] { rvr ⇒
     requiredFilter(rvr.name, rvr.deserializer, rvr.requiredValue)
+  }
+
+  /************ repeated parameter support ******************/
+
+  private def repeatedFilter[T](paramName: String)(implicit fsd: FSD[T]): Directive1[Iterable[T]] =
+    extract(_.request.uri.query.getAll(paramName)).flatMap { values ⇒
+      val result = values.map(fsd.apply _).foldLeft(Right(Nil): Deserialized[List[T]]) { (e, acc) ⇒
+        for {
+          xs ← acc.right
+          x ← e.right
+        } yield xs :: x
+      }
+      handleParamResult(paramName, result)
+    }
+
+  implicit def forRepVR[T](implicit fsd: FSD[T]) = extractParameter[RepeatedValueReceptacle[T], Iterable[T]] { rvr ⇒
+    repeatedFilter(rvr.name)
+  }
+
+  implicit def forRepVDR[T] = extractParameter[RepeatedValueDeserializerReceptacle[T], Iterable[T]] { rvr ⇒
+    repeatedFilter(rvr.name)(rvr.deserializer)
   }
 
   /************ tuple support ******************/

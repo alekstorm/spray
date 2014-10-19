@@ -24,7 +24,7 @@ Description
 -----------
 Query parameters can be either extracted as a String or can be converted to another type. The parameter name
 can be supplied either as a String or as a Symbol. Parameter extraction can be modified to mark a query parameter
-as required or optional or to filter requests where a parameter has a certain value:
+as required, optional, or repeated, or to filter requests where a parameter has a certain value:
 
 ``"color"``
     extract value of parameter "color" as ``String``
@@ -39,6 +39,13 @@ as required or optional or to filter requests where a parameter has a certain va
     (see also :ref:`unmarshalling`)
 ``"amount".as(deserializer)``
     extract value of parameter "amount" with an explicit ``Deserializer``
+``"distance".*``
+    extract multiple occurrences of parameter "distance" as ``Iterable[String]``
+``"distance".as[Int].*``
+    extract multiple occurrences of parameter "distance" as ``Iterable[Int]``, you need a matching ``Deserializer`` in scope for that to work
+    (see also :ref:`unmarshalling`)
+``"distance".as[Int].*(HexInt)``
+    extract multiple occurrences of parameter "distance" as ``Iterable[Int]`` using the ``HexInt`` deserializer
 
 You can use :ref:`case-class-extraction` to group several extracted values together into a case-class
 instance.
@@ -80,3 +87,15 @@ Deserialized parameter
 
 .. includecode:: ../code/docs/directives/ParameterDirectivesExamplesSpec.scala
    :snippet: mapped-value
+
+Repeated parameter
+++++++++++++++++++
+
+.. includecode:: ../code/docs/directives/ParameterDirectivesExamplesSpec.scala
+   :snippet: repeated
+
+Repeated, deserialized parameter
+++++++++++++++++++
+
+.. includecode:: ../code/docs/directives/ParameterDirectivesExamplesSpec.scala
+   :snippet: mapped-repeated
